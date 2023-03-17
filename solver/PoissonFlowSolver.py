@@ -78,7 +78,7 @@ class PoissonFlowSolver():
         gt = coeff.view(N, BL, 1, 1, 1) * real_difference  # N, BL, C, H, D
         gt = torch.sum(gt, dim=1)  # N, C, H, D
         gt_norm = torch.norm(gt.view(N, C * H * D), dim=1, p=2).view(N, 1, 1, 1)
-        gt = gt / (gt_norm + 5)
+        gt = gt / (gt_norm + 15)
         gt = gt * math.sqrt(C * H * D)
         # final loss
         predict = self.unet(perturbed_x, perturbed_z)[:, :3, :, :]

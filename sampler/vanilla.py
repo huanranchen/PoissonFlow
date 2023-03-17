@@ -10,9 +10,10 @@ class VanillaSampler(nn.Module):
                  unet: nn.Module,
                  img_shape=(3, 32, 32),
                  z_max=40,
-                 stride=0.05,
+                 dt=0.1,
                  std=0.5,
                  mean=0.5,
+                 gamma=15,
                  ):
         super(VanillaSampler, self).__init__()
         self.device = torch.device('cuda')
@@ -22,8 +23,9 @@ class VanillaSampler(nn.Module):
         self.z_max = z_max
         self.std = std
         self.mean = mean
-        self.stride = stride
+        self.dt = dt
         self.init()
+        self.gamma = gamma
 
     def init(self):
         self.unet.eval().to(self.device).requires_grad_(False)
@@ -31,7 +33,7 @@ class VanillaSampler(nn.Module):
         # self.sde_type = "ito"
         self.to_img = transforms.ToPILImage()
         self.i = 0
-        print(f'poisson flow vanilla solver, dt is {self.stride}')
+        print(f'poisson flow vanilla solver, dt is {self.dt}')
 
     def initialize(self, batch_size=1):
         gaussian = torch.randn(batch_size, *self.img_shape, device=self.device)
@@ -47,10 +49,10 @@ class VanillaSampler(nn.Module):
         # clip the sample norm (radius)
         samples_norm = np.clip(samples_norm, 1, 3000)
         samples_norm = torch.from_numpy(samples_norm).cuda().view(len(samples_norm), -1).to(torch.float)
-        # print(samples_norm)
+        print(samples_norm)
         # result
         result = samples_norm.view(batch_size, 1, 1, 1) * unit_gaussian
-        return unit_gaussian * 100
+        return unit_gaussian * result
 
     def convert(self, x):
         x = x * self.std + self.mean
@@ -61,15 +63,22 @@ class VanillaSampler(nn.Module):
         return x
 
     @torch.no_grad()
-    def sample(self, ):
+    def sample(self):
         x = self.initialize()
         N, C, H, D = x.shape
+        assert N == 1, 'sample size now only support 1'
         z = torch.zeros((N,), device=self.device) + self.z_max
         while z[0] > 0:
-            v = self.unet(x, z)
+            normalized_x = self.unet(x, z)
+            norm_out = torch.norm(normalized_x)
             # print(direction)
-            x = x + v * self.stride
-            z = z - self.stride
+            x = x + normalized_x * self.dt
+            normalized_z = z / (torch.sqrt(
+                (
+                        (self.gamma * norm_out / math.sqrt(self.state_size)) /
+                        (1 - norm_out / math.sqrt(self.state_size))) ** 2
+                + z ** 2) + self.gamma)
+            z = z - self.dt * normalized_z
         return self.convert(x)
 
     def __call__(self, *args, **kwargs):
