@@ -52,7 +52,7 @@ class VanillaSampler(nn.Module):
         print(samples_norm)
         # result
         result = samples_norm.view(batch_size, 1, 1, 1) * unit_gaussian
-        return unit_gaussian * result
+        return result
 
     def convert(self, x):
         x = x * self.std + self.mean
@@ -68,7 +68,7 @@ class VanillaSampler(nn.Module):
         N, C, H, D = x.shape
         assert N == 1, 'sample size now only support 1'
         z = torch.zeros((N,), device=self.device) + self.z_max
-        while z[0] > 0:
+        while z[0] > 1e-3:
             normalized_x = self.unet(x, z)
             norm_out = torch.norm(normalized_x)
             # print(direction)
@@ -76,9 +76,13 @@ class VanillaSampler(nn.Module):
             normalized_z = z / (torch.sqrt(
                 (
                         (self.gamma * norm_out / math.sqrt(self.state_size)) /
-                        (1 - norm_out / math.sqrt(self.state_size))) ** 2
-                + z ** 2) + self.gamma)
-            z = z - self.dt * normalized_z
+                        (1 - norm_out / math.sqrt(self.state_size))
+                ) ** 2
+                + z ** 2
+            )
+                                + self.gamma)
+            print(z, normalized_z)
+            z = z - self.dt * normalized_z * math.sqrt(self.state_size)
         return self.convert(x)
 
     def __call__(self, *args, **kwargs):

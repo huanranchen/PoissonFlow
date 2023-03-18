@@ -13,8 +13,8 @@ to_img = transforms.ToPILImage()
 train_loader = get_CIFAR10_train(batch_size=2048)
 model = get_NCSNPP()
 model.load_state_dict(torch.load('unet.pt'))
-solver = PoissonFlowSolver(model)
-solver.train(train_loader)
+# solver = PoissonFlowSolver(model)
+# solver.train(train_loader)
 
 # #
 sampler = VanillaSampler(unet=model)
